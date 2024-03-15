@@ -12,11 +12,12 @@ pub struct GroupScheduleField {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum ScheduleField {
+pub enum ScheduleFieldEnum {
     Group(HashMap<u8, GroupScheduleField>),
     Class(GroupScheduleField),
-    Empty,
 }
+
+type ScheduleField = Option<ScheduleFieldEnum>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ScheduleRow {
@@ -33,20 +34,19 @@ pub type Schedule = Vec<ScheduleRow>;
 pub async fn get_schedule(schedule_url: &str) -> Schedule {
     let html = get_html(schedule_url).await.unwrap();
     let document = Html::parse_document(&html);
-    
+
     get_schedule_from_html(document)
 }
 
 fn get_schedule_from_html(document: Html) -> Schedule {
-
     let table_selector = Selector::parse("table.tabela").unwrap();
     let table = document.select(&table_selector).next().unwrap();
-    
+
     let tr_selector = Selector::parse("tr")
         .map_err(|e| format_err!(e.to_string())).unwrap();
 
     let mut schedule = vec![];
-    
+
     let trs = table.select(&tr_selector);
     for tr in trs {
         if let Some(schedule_row) = get_schedule_row(tr) {
@@ -73,7 +73,7 @@ fn get_schedule_row(tr: scraper::ElementRef) -> Option<ScheduleRow> {
         let text = text.trim().to_string();
 
         if text.is_empty() || text == "&nbsp;" {
-            schedule_fields.push(ScheduleField::Empty);
+            schedule_fields.push(None);
             continue;
         }
 
@@ -91,14 +91,16 @@ fn get_schedule_row(tr: scraper::ElementRef) -> Option<ScheduleRow> {
 
 
         if p_spans_count == 0 {
-            schedule_fields.push(ScheduleField::Empty);
+            schedule_fields.push(None);
             continue;
         }
 
         if p_spans_count == 1 {
-            schedule_fields.push(ScheduleField::Class(
-                get_group_schedule_field(Html::parse_fragment(&td.html()))
-            ));
+            schedule_fields.push(
+                Some(ScheduleFieldEnum::Class(
+                    get_group_schedule_field(Html::parse_fragment(&td.html()))
+                ))
+            );
             continue;
         }
 
@@ -137,8 +139,8 @@ fn get_schedule_row(tr: scraper::ElementRef) -> Option<ScheduleRow> {
             if split_subject_len > 1 {
                 group_num = split_subject.last()?.split("/").next()?
                     .parse().ok()?;
-                
-                schedule_field.subject = split_subject[0..split_subject_len-1]
+
+                schedule_field.subject = split_subject[0..split_subject_len - 1]
                     .join("");
             }
 
@@ -148,7 +150,9 @@ fn get_schedule_row(tr: scraper::ElementRef) -> Option<ScheduleRow> {
             );
         }
 
-        schedule_fields.push(ScheduleField::Group(group_schedule));
+        schedule_fields.push(Some(
+            ScheduleFieldEnum::Group(group_schedule)
+        ));
     }
 
 
@@ -208,9 +212,9 @@ mod tests {
     fn test_get_schedule_from_html() {
         let raw_html = include_str!("./test_assets/plany_o27.html");
         let html = Html::parse_document(raw_html);
-        
+
         let schedule = get_schedule_from_html(html);
-        
+
         assert_eq!(schedule.len(), 9);
     }
 }
