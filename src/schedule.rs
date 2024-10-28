@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use anyhow::format_err;
 use scraper::{Html, Selector};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, self};
 use crate::get_html;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -12,6 +12,7 @@ pub struct GroupScheduleField {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ScheduleFieldEnum {
     Group(HashMap<u8, GroupScheduleField>),
     Class(GroupScheduleField),
@@ -29,7 +30,37 @@ pub struct ScheduleRow {
     pub friday: ScheduleField,
 }
 
-pub type Schedule = Vec<ScheduleRow>;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Schedule {
+    pub time: Vec<String>,
+    pub monday: Vec<ScheduleField>,
+    pub tuesday: Vec<ScheduleField>,
+    pub wednesday: Vec<ScheduleField>,
+    pub thursday: Vec<ScheduleField>,
+    pub friday: Vec<ScheduleField>,
+}
+
+impl Schedule {
+    pub fn new() -> Self {
+        Self {
+            time: vec![],
+            monday: vec![],
+            tuesday: vec![],
+            wednesday: vec![],
+            thursday: vec![],
+            friday: vec![],
+        }
+    }
+    
+    pub fn add_row(&mut self, row: ScheduleRow) {
+        self.time.push(row.time);
+        self.monday.push(row.monday);
+        self.tuesday.push(row.tuesday);
+        self.wednesday.push(row.wednesday);
+        self.thursday.push(row.thursday);
+        self.friday.push(row.friday);
+    }
+}
 
 pub async fn get_schedule(schedule_url: &str) -> Schedule {
     let html = get_html(schedule_url).await.unwrap();
@@ -45,12 +76,12 @@ fn get_schedule_from_html(document: Html) -> Schedule {
     let tr_selector = Selector::parse("tr")
         .map_err(|e| format_err!(e.to_string())).unwrap();
 
-    let mut schedule = vec![];
+    let mut schedule = Schedule::new();
 
     let trs = table.select(&tr_selector);
     for tr in trs {
         if let Some(schedule_row) = get_schedule_row(tr) {
-            schedule.push(schedule_row);
+            schedule.add_row(schedule_row);
         }
     }
 
@@ -215,6 +246,6 @@ mod tests {
 
         let schedule = get_schedule_from_html(html);
 
-        assert_eq!(schedule.len(), 9);
+        assert_eq!(schedule.time.len(), 9);
     }
 }
