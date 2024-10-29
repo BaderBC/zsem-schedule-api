@@ -1,5 +1,8 @@
 Hi y'all!
 
+You can check deployed API on:
+[bstrama.com/zsem-api/class/list](https://bstrama.com/zsem-api/class/list) or [bstrama.com/zsem-api/schedule/o17](https://bstrama.com/zsem-api/schedule/o17)
+
 Wanna check how it work?
 - Clone repo
 - run `cargo run`
