@@ -1,0 +1,32 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  deploy-backend:
+    runs-on: self-hosted
+    
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Docker image
+        run: docker build -t zsem-schedule-api .
+
+      - name: Stop and remove existing container
+        run: |
+          if [ $(docker ps -q -f name=zsem-schedule-api) ]; then
+            docker stop zsem-schedule-api
+          fi
+          if [ $(docker ps -aq -f name=zsem-schedule-api) ]; then
+            docker rm zsem-schedule-api
+          fi
+      - name: Run Docker container
+        shell: bash
+        run: |
+          docker run -d \
+            --restart always \
+            --name zsem-schedule-api \
+            -p 5004:3000 zsem-schedule-api
+
