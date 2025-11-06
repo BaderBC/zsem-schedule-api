@@ -113,6 +113,8 @@ fn get_schedule_row(tr: scraper::ElementRef) -> Option<ScheduleRow> {
 
         let s_class_a_selector = Selector::parse("a.s").ok()?;
         let s_class_a_elements = td.select(&s_class_a_selector);
+        let s_class_span_selector = Selector::parse("span.s").ok()?;
+        let s_class_span_elements = td.select(&s_class_span_selector);
 
         let n_class_a_selector = Selector::parse("a.n").ok()?;
         let n_class_a_elements = td.select(&n_class_a_selector);
@@ -149,14 +151,19 @@ fn get_schedule_row(tr: scraper::ElementRef) -> Option<ScheduleRow> {
             }
 
             if combined == "" {
-                // combine span with a.s and a.n
+                // combine span with a.s/span.s and a.n
                 let span_str = span.html();
-                let a_s = s_class_a_elements.clone()
-                    .nth(group_num)?.html();
                 let a_n = n_class_a_elements.clone()
                     .nth(group_num)?.html();
+                
+                // Try to get classroom from a.s first, then span.s
+                let classroom_html = s_class_a_elements.clone()
+                    .nth(group_num)
+                    .map(|e| e.html())
+                    .or_else(|| s_class_span_elements.clone().nth(group_num).map(|e| e.html()))
+                    .unwrap_or_default();
 
-                combined = span_str + &a_n + &a_s;
+                combined = span_str + &a_n + &classroom_html;
             }
 
             let mut schedule_field = get_group_schedule_field(Html::parse_fragment(&combined));
@@ -216,17 +223,23 @@ fn get_group_schedule_field(single_group_html: Html) -> GroupScheduleField {
         .split('.').next().unwrap()
         .to_string();
 
-    // the classroom is <a class="s">...</a>
-    let s_class_selector = Selector::parse("a.s").unwrap();
-    let classroom = single_group_html.select(&s_class_selector).next().unwrap()
-        .text().collect::<Vec<_>>().join(" ")
-        .trim().to_string();
+    // the classroom is <a class="s">...</a> or <span class="s">...</span>
+    let s_class_a_selector = Selector::parse("a.s").unwrap();
+    let s_class_span_selector = Selector::parse("span.s").unwrap();
+    
+    let classroom = if let Some(element) = single_group_html.select(&s_class_a_selector).next() {
+        element.text().collect::<Vec<_>>().join(" ").trim().to_string()
+    } else if let Some(element) = single_group_html.select(&s_class_span_selector).next() {
+        element.text().collect::<Vec<_>>().join(" ").trim().to_string()
+    } else {
+        String::new()
+    };
 
-    // the classroom_id is href of <a class="s">...</a>
-    let _classroom_id = single_group_html.select(&s_class_selector).next().unwrap()
-        .value().attr("href").unwrap()
-        .split('.').next().unwrap()
-        .to_string();
+    // the classroom_id is href of <a class="s">...</a> (may not exist if it's a span)
+    let _classroom_id = single_group_html.select(&s_class_a_selector).next()
+        .and_then(|e| e.value().attr("href"))
+        .map(|href| href.split('.').next().unwrap_or("").to_string())
+        .unwrap_or_default();
 
     GroupScheduleField {
         subject,
@@ -241,11 +254,11 @@ mod tests {
 
     #[test]
     fn test_get_schedule_from_html() {
-        let raw_html = include_str!("./test_assets/plany_o27.html");
+        let raw_html = include_str!("./test_assets/plany_o6.html");
         let html = Html::parse_document(raw_html);
 
         let schedule = get_schedule_from_html(html);
 
-        assert_eq!(schedule.time.len(), 9);
+        assert_eq!(schedule.time.len(), 8);
     }
 }
